@@ -8,38 +8,38 @@
 
         function searchFilm(object, callback) {
             var title = object.original_title || object.title;
-            if (!title) return callback([]);
 
-            // возвращаем просто страницу поиска / первого найденного фильма
-            callback([{
+            // Чтобы Lampa точно показал источник — нужно вернуть объект с этими полями
+            var item = {
                 title: title,
                 url: BASE + '/?s=' + encodeURIComponent(title),
-                type: 'movie'
-            }]);
+                type: 'movie',
+                // WebView флаг — открывается во внешнем окне
+                external: true,
+                // нужно обязательно, иначе источник не появится
+                quality: 'WEB'
+            };
+
+            callback([item]);
         }
 
-        function openWebView(item, callback) {
+        function detail(item, callback) {
+            // Возвращаем **тот же объект**, чтобы Lampa открыл его
             callback([{
                 title: item.title,
                 url: item.url,
-                quality: 'WEB',
-                // WebView активируем через встроенный метод Lampa
-                external: true
+                type: 'movie',
+                external: true,
+                quality: 'WEB'
             }]);
         }
 
         Lampa.Source.Online.add({
             id: 'sinemaizle',
-            name: 'Sinemaizle',
+            name: 'Sinemaizle WebView',
             type: 'movie',
-
-            search: function (object, callback) {
-                searchFilm(object, callback);
-            },
-
-            detail: function (item, callback) {
-                openWebView(item, callback);
-            }
+            search: searchFilm,
+            detail: detail
         });
 
         Lampa.Plugin.add({
