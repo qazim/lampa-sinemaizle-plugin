@@ -1,17 +1,16 @@
 (function () {
     'use strict';
 
-    if (!window.Lampa) return;
+    if (typeof Lampa == 'undefined') return;
 
     var BASE_URL = 'https://sinemaizle.org';
 
-    function request(url, success, error) {
-        Lampa.Network.get(url, success, error);
+    function parse(html) {
+        return Lampa.Utils.parseHtml(html);
     }
 
-    function htmlToDom(html) {
-        var parser = new DOMParser();
-        return parser.parseFromString(html, 'text/html');
+    function request(url, success, error) {
+        Lampa.Network.get(url, success, error);
     }
 
     Lampa.Source.Online.add({
@@ -21,15 +20,16 @@
 
         search: function (query, callback) {
             request(BASE_URL + '/?s=' + encodeURIComponent(query), function (html) {
-                var doc = htmlToDom(html);
+                var doc = parse(html);
                 var items = [];
 
-                doc.querySelectorAll('article a').forEach(function (a) {
+                doc.find('article a').each(function () {
+                    var a = this;
                     var img = a.querySelector('img');
                     if (!img) return;
 
                     items.push({
-                        title: img.alt || a.title,
+                        title: img.alt || a.title || 'Sinemaizle',
                         poster: img.src,
                         url: a.href,
                         type: 'movie'
@@ -44,8 +44,8 @@
 
         detail: function (url, callback) {
             request(url, function (html) {
-                var doc = htmlToDom(html);
-                var iframe = doc.querySelector('iframe');
+                var doc = parse(html);
+                var iframe = doc.find('iframe').get(0);
 
                 if (!iframe) {
                     callback([]);
@@ -65,7 +65,7 @@
 
     Lampa.Plugin.add({
         name: 'Sinemaizle',
-        author: 'custom',
+        author: 'qazim',
         version: '1.0'
     });
 
