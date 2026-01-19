@@ -4,10 +4,62 @@
     Lampa.Listener.follow('app', function (e) {
         if (e.type !== 'ready') return;
 
-        var BASE_URL = 'https://sinemaizle.org';
+        var BASE = 'https://sinemaizle.org';
 
         function parse(html) {
             return Lampa.Utils.parseHtml(html);
+        }
+
+        function searchFilm(object, callback) {
+            var title = object.original_title || object.title;
+
+            if (!title) {
+                callback([]);
+                return;
+            }
+
+            Lampa.Network.get(
+                BASE + '/?s=' + encodeURIComponent(title),
+                function (html) {
+                    var doc = parse(html);
+                    var item = doc.find('article a').get(0);
+
+                    if (!item) {
+                        callback([]);
+                        return;
+                    }
+
+                    callback([{
+                        title: title,
+                        url: item.href
+                    }]);
+                },
+                function () {
+                    callback([]);
+                }
+            );
+        }
+
+        function getPlayer(url, callback) {
+            Lampa.Network.get(url, function (html) {
+                var doc = parse(html);
+
+                // берём ПЕРВЫЙ iframe (рекламный + потом фильм)
+                var iframe = doc.find('iframe').get(0);
+
+                if (!iframe || !iframe.src) {
+                    callback([]);
+                    return;
+                }
+
+                callback([{
+                    title: 'Sinemaizle',
+                    url: iframe.src,
+                    quality: 'WEB'
+                }]);
+            }, function () {
+                callback([]);
+            });
         }
 
         Lampa.Source.Online.add({
@@ -15,47 +67,19 @@
             name: 'Sinemaizle',
             type: 'movie',
 
-            search: function (query, callback) {
-                Lampa.Network.get(BASE_URL + '/?s=' + encodeURIComponent(query), function (html) {
-                    var doc = parse(html);
-                    var items = [];
-
-                    doc.find('article').each(function () {
-                        var a = this.querySelector('a');
-                        var img = this.querySelector('img');
-                        if (!a || !img) return;
-
-                        items.push({
-                            title: img.alt,
-                            poster: img.src,
-                            url: a.href,
-                            type: 'movie'
-                        });
-                    });
-
-                    callback(items);
-                }, function () {
-                    callback([]);
-                });
+            search: function (object, callback) {
+                searchFilm(object, callback);
             },
 
-            detail: function (url, callback) {
-                Lampa.Network.get(url, function (html) {
-                    var doc = parse(html);
-                    var iframe = doc.find('iframe').get(0);
-
-                    if (!iframe) {
-                        callback([]);
-                        return;
-                    }
-
-                    callback([{
-                        title: 'Sinemaizle',
-                        url: iframe.src,
-                        quality: 'HD'
-                    }]);
-                });
+            detail: function (item, callback) {
+                getPlayer(item.url, callback);
             }
+        });
+
+        Lampa.Plugin.add({
+            name: 'Sinemaizle',
+            version: '1.0',
+            author: 'qazim'
         });
     });
 })();
