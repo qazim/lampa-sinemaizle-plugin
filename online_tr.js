@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var BASE_URL = 'https://sinemaizle.org';
+  var BASE_URL = 'https://www.sinemafilmizle.com.tr';
 
   function component(object) {
     var network = new Lampa.Reguest();
