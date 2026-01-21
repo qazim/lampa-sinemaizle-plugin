@@ -1,80 +1,194 @@
 (function () {
     'use strict';
 
-    /**
-     * Турецкий Online Mod для Lampa
-     * WebView + iframe-совместимые сайты
-     */
+    var BASE_URL = 'https://sinemaizle.org';
+    
+    // Манифест плагина
+    var manifest = {
+        type: 'video',
+        version: '1.0.2',
+        name: 'SinemaIzle',
+        description: 'Онлайн просмотр с sinemaizle.org',
+        component: 'sinemaizle_online'
+    };
 
-    function sinemaizle(component, object) {
-        this.search = function (_object) {
-            var title = _object.search || (_object.movie && _object.movie.title);
-            if (!title) return component.empty();
+    // Класс компонента
+    function Component(object) {
+        var network = new Lampa.Reguest();
+        var scroll = new Lampa.Scroll({ 
+            mask: true, 
+            over: true 
+        });
+        
+        var items = [];
+        var html = $('<div></div>');
+        var active = 0;
+        var _this = this;
 
-            component.reset();
-
-            component.append({
-                title: 'Sinemaizle.org',
-                quality: 'WEB',
-                info: 'TR',
-                stream: 'https://sinemaizle.org/?s=' + encodeURIComponent(title),
-                external: true
-            });
-
-            component.start(true);
+        this.create = function () {
+            return this.render();
         };
 
-        this.destroy = function () {};
-    }
+        this.search = function (object, data) {
+            this.activity.loader(true);
+            
+            var query = object.search || data;
+            var search_url = BASE_URL + '/?s=' + encodeURIComponent(query);
+            
+            network.clear();
+            network.timeout(10000);
+            
+            network.silent(search_url, this.parseSearch.bind(this), this.onError.bind(this), false, {
+                dataType: 'text'
+            });
+        };
 
-    function dizibox(component, object) {
-        this.search = function (_object) {
-            var title = _object.search || (_object.movie && _object.movie.title);
-            if (!title) return component.empty();
-
-            Lampa.Network.get(
-                'https://dizibox.pw/ara/' + encodeURIComponent(title),
-                function (html) {
-                    var doc = $('<div>' + html + '</div>');
-                    var link = doc.find('.film-list a').attr('href');
-                    if (!link) return component.empty();
-
-                    Lampa.Network.get(link, function (html2) {
-                        var doc2 = $('<div>' + html2 + '</div>');
-                        var iframe = doc2.find('iframe').attr('src');
-                        if (!iframe) return component.empty();
-
-                        component.reset();
-                        component.append({
-                            title: 'Dizibox',
-                            quality: 'HD',
-                            info: 'TR',
-                            stream: iframe
-                        });
-                        component.start(true);
+        this.parseSearch = function (str) {
+            this.activity.loader(false);
+            
+            items = [];
+            
+            try {
+                var html_doc = str;
+                var matches;
+                
+                // Простой регулярный парсинг для поиска фильмов
+                var pattern = /<article[^>]*>[\s\S]*?<a[^>]*href=["']([^"']+)["'][^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<h[23][^>]*>([^<]+)<\/h[23]>[\s\S]*?<\/article>/gi;
+                
+                while ((matches = pattern.exec(html_doc)) !== null) {
+                    items.push({
+                        title: matches[3].trim(),
+                        url: matches[1],
+                        img: matches[2],
+                        quality: '',
+                        year: ''
                     });
                 }
-            );
+                
+                this.build();
+                
+                if (items.length === 0) {
+                    this.empty();
+                }
+            } catch (e) {
+                console.log('SinemaIzle parse error:', e);
+                this.empty();
+            }
         };
 
-        this.destroy = function () {};
+        this.onError = function () {
+            this.activity.loader(false);
+            this.empty(Lampa.Lang.translate('torrent_parser_request_error'));
+        };
+
+        this.build = function () {
+            scroll.clear();
+            scroll.render().addClass('torrent-list');
+            
+            items.forEach(function (element) {
+                var item = Lampa.Template.get('card', {
+                    title: element.title,
+                    release_year: element.year
+                });
+                
+                item.addClass('card--collection');
+                
+                var img_elem = item.find('.card__img')[0];
+                if (img_elem && element.img) {
+                    img_elem.onload = function () {
+                        item.addClass('card--loaded');
+                    };
+                    img_elem.onerror = function () {
+                        img_elem.src = './img/img_broken.svg';
+                    };
+                    img_elem.src = element.img;
+                }
+                
+                item.on('hover:focus', function () {
+                    active = items.indexOf(element);
+                    scroll.update(item, true);
+                });
+                
+                item.on('hover:enter', function () {
+                    _this.openMovie(element);
+                });
+                
+                scroll.append(item);
+            });
+            
+            scroll.append($('<div class="torrent-list__footer"></div>'));
+            html.append(scroll.render());
+        };
+
+        this.openMovie = function (element) {
+            Lampa.Activity.push({
+                url: '',
+                title: element.title,
+                component: 'full',
+                page: 1,
+                movie: {
+                    title: element.title,
+                    original_title: element.title
+                },
+                source: 'sinemaizle'
+            });
+        };
+
+        this.empty = function (msg) {
+            var empty = Lampa.Template.get('list_empty');
+            if (msg) empty.find('.empty__descr').text(msg);
+            scroll.clear();
+            scroll.render().addClass('torrent-list');
+            scroll.append(empty);
+            html.append(scroll.render());
+        };
+
+        this.start = function () {
+            if (Lampa.Activity.active().activity !== this.activity) return;
+            this.search(object, object.search);
+        };
+
+        this.pause = function () {};
+
+        this.stop = function () {};
+
+        this.render = function () {
+            return html;
+        };
+
+        this.destroy = function () {
+            network.clear();
+            scroll.destroy();
+            html.remove();
+        };
     }
 
-    /**
-     * Регистрация online_mod
-     */
-    Lampa.Listener.follow('app', function (e) {
-        if (e.type !== 'ready') return;
+    // Функция запуска плагина
+    function startPlugin() {
+        window.plugin_sinemaizle_ready = true;
+        
+        Lampa.Component.add('sinemaizle_online', Component);
+        
+        // Добавление стилей
+        var style = '<style>.sinemaizle-online{padding:1em}</style>';
+        Lampa.Template.add('sinemaizle_style', style);
+        $('body').append(Lampa.Template.get('sinemaizle_style', {}, true));
+        
+        // Регистрация манифеста
+        Lampa.Manifest.plugins = manifest;
+        
+        console.log('SinemaIzle plugin v' + manifest.version + ' loaded');
+    }
 
-        Lampa.Source.Online.add({
-            id: 'turkish_online',
-            name: 'Turkish Online',
-            type: 'movie',
-            sources: {
-                sinemaizle: sinemaizle,
-                dizibox: dizibox
+    // Инициализация
+    if (window.appready) {
+        startPlugin();
+    } else {
+        Lampa.Listener.follow('app', function (e) {
+            if (e.type === 'ready') {
+                startPlugin();
             }
         });
-    });
+    }
 
 })();
