@@ -262,9 +262,9 @@
         var iframes = doc.querySelectorAll('iframe');
         console.log('SinemaIzle: Found iframes:', iframes.length);
         
-        var video_urls = [];
+        var player_iframe = null;
         
-        // Собираем все возможные iframe
+        // Ищем iframe плеера
         for (var i = 0; i < iframes.length; i++) {
           var iframe = iframes[i];
           var src = iframe.src || iframe.getAttribute('data-src') || iframe.getAttribute('data-lazy-src');
@@ -287,66 +287,126 @@
                 }
               }
               
-              video_urls.push(src);
+              player_iframe = src;
+              break;
             }
           }
         }
         
-        console.log('SinemaIzle: Potential video URLs:', video_urls);
+        if (player_iframe) {
+          console.log('SinemaIzle: Loading player iframe:', player_iframe);
+          this.loadPlayerFrame(player_iframe, element);
+        } else {
+          console.log('SinemaIzle: No player iframe found');
+          Lampa.Noty.show('Плеер не найден');
+        }
         
-        // Пробуем найти video тег
-        var videos = doc.querySelectorAll('video, video source');
-        console.log('SinemaIzle: Found video tags:', videos.length);
+      } catch(e) {
+        console.log('SinemaIzle: Player parse error:', e);
+        Lampa.Noty.show('Ошибка: ' + e.message);
+      }
+    };
+
+    this.loadPlayerFrame = function(iframe_url, element) {
+      var _this = this;
+      
+      console.log('SinemaIzle: Fetching player page:', iframe_url);
+      
+      var proxy_url = PROXY_URL + encodeURIComponent(iframe_url);
+      
+      network.clear();
+      network.timeout(20000);
+      
+      network.native(proxy_url, function(html_text) {
+        console.log('SinemaIzle: Player page loaded, size:', html_text.length);
+        _this.extractVideoUrl(html_text, element);
+      }, function() {
+        console.log('SinemaIzle: Failed to load player page');
+        Lampa.Noty.show('Не удалось загрузить плеер');
+      }, false, {
+        dataType: 'text'
+      });
+    };
+
+    this.extractVideoUrl = function(html_text, element) {
+      try {
+        console.log('SinemaIzle: Extracting video URL...');
         
-        for (var j = 0; j < videos.length; j++) {
-          var video = videos[j];
-          var video_src = video.src || video.getAttribute('data-src');
-          if (video_src) {
-            console.log('SinemaIzle: Video tag src:', video_src);
-            video_urls.push(video_src);
+        var video_urls = [];
+        
+        // Ищем прямые ссылки на .m3u8 и .mp4
+        var m3u8_matches = html_text.match(/https?:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*/gi);
+        var mp4_matches = html_text.match(/https?:\/\/[^\s"'<>]+\.mp4[^\s"'<>]*/gi);
+        
+        if (m3u8_matches) {
+          m3u8_matches.forEach(function(url) {
+            console.log('SinemaIzle: Found .m3u8:', url);
+            video_urls.push(url);
+          });
+        }
+        
+        if (mp4_matches) {
+          mp4_matches.forEach(function(url) {
+            console.log('SinemaIzle: Found .mp4:', url);
+            video_urls.push(url);
+          });
+        }
+        
+        // Ищем в обычных JSON объектах
+        var json_matches = html_text.match(/['"]file['"]\s*:\s*['"]([^'"]+)['"]/gi);
+        if (json_matches) {
+          json_matches.forEach(function(match) {
+            var url = match.match(/['"]([^'"]+)['"]$/);
+            if (url && url[1]) {
+              console.log('SinemaIzle: Found in file property:', url[1]);
+              video_urls.push(url[1]);
+            }
+          });
+        }
+        
+        // Ищем в video тегах
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html_text, 'text/html');
+        var videos = doc.querySelectorAll('video source, video');
+        
+        for (var i = 0; i < videos.length; i++) {
+          var src = videos[i].src || videos[i].getAttribute('data-src');
+          if (src) {
+            console.log('SinemaIzle: Found video tag:', src);
+            video_urls.push(src);
           }
         }
         
-        // Ищем в script тегах
-        var scripts = doc.querySelectorAll('script');
-        for (var k = 0; k < scripts.length; k++) {
-          var script_content = scripts[k].textContent;
-          
-          // Ищем URL видео в JavaScript
-          var matches = script_content.match(/['"]https?:\/\/[^'"]+\.m3u8['"]/g) ||
-                       script_content.match(/['"]https?:\/\/[^'"]+\.mp4['"]/g) ||
-                       script_content.match(/src\s*:\s*['"]([^'"]+)['"]/g);
-          
-          if (matches) {
-            matches.forEach(function(match) {
-              var url = match.replace(/['"]/g, '').replace('src:', '').trim();
-              if (url.startsWith('http')) {
-                console.log('SinemaIzle: Found in script:', url);
-                video_urls.push(url);
-              }
-            });
-          }
-        }
+        console.log('SinemaIzle: All found URLs:', video_urls);
         
-        // Выбираем первый подходящий URL
+        // Выбираем лучший URL
         var video_url = null;
-        for (var m = 0; m < video_urls.length; m++) {
-          var url = video_urls[m];
-          
-          // Предпочитаем прямые ссылки на видео
-          if (url.indexOf('.m3u8') !== -1 || url.indexOf('.mp4') !== -1) {
-            video_url = url;
+        
+        // Предпочитаем .m3u8
+        for (var j = 0; j < video_urls.length; j++) {
+          if (video_urls[j].indexOf('.m3u8') !== -1) {
+            video_url = video_urls[j];
             break;
           }
         }
         
-        // Если прямой ссылки нет, берем первый iframe
+        // Если нет, берем .mp4
+        if (!video_url) {
+          for (var k = 0; k < video_urls.length; k++) {
+            if (video_urls[k].indexOf('.mp4') !== -1) {
+              video_url = video_urls[k];
+              break;
+            }
+          }
+        }
+        
+        // Если всё ещё нет, берем первый
         if (!video_url && video_urls.length > 0) {
           video_url = video_urls[0];
         }
         
         if (video_url) {
-          console.log('SinemaIzle: Selected video URL:', video_url);
+          console.log('SinemaIzle: Playing video:', video_url);
           
           Lampa.Player.play({
             title: element.title,
@@ -358,13 +418,13 @@
             url: video_url
           }]);
         } else {
-          console.log('SinemaIzle: No video source found');
-          console.log('SinemaIzle: Page HTML (first 1000 chars):', html_text.substring(0, 1000));
-          Lampa.Noty.show('Плеер не найден. Попробуйте другой фильм.');
+          console.log('SinemaIzle: No video URL found');
+          console.log('SinemaIzle: HTML excerpt:', html_text.substring(0, 500));
+          Lampa.Noty.show('Видео не найдено');
         }
         
       } catch(e) {
-        console.log('SinemaIzle: Player parse error:', e);
+        console.log('SinemaIzle: Extract error:', e);
         Lampa.Noty.show('Ошибка: ' + e.message);
       }
     };
@@ -431,7 +491,7 @@
     
     var manifest = {
       type: 'video',
-      version: '1.0.4',
+      version: '1.0.5',
       name: 'SinemaIzle',
       description: 'Онлайн просмотр с sinemaizle.org',
       component: 'sinemaizle'
@@ -475,7 +535,7 @@
     Lampa.Component.add('sinemaizle', component);
 
     var button = `
-      <div class="full-start__button selector view--sinemaizle" data-subtitle="SinemaIzle v1.0.4">
+      <div class="full-start__button selector view--sinemaizle" data-subtitle="SinemaIzle v1.0.5">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
           <path d="M8 5v14l11-7z"/>
         </svg>
