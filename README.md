@@ -6,9 +6,9 @@
 
 Вставьте ссылку в Lampa TV → Настройки → Расширения → Добавить плагин:
 ```
-https://qazim.github.io/lampa-sinemaizle-plugin/index.js
+https://qazim.github.io/lampa-tr-plugin/index.js
 
-https://qazim.github.io/lampa-sinemaizle-plugin/online_tr.js
+https://qazim.github.io/lampa-tr-plugin/online_tr.js
 ```
 
 ## Версия
