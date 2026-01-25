@@ -261,12 +261,63 @@
       
       console.log('SinemaIzle: Opening movie:', element.title, 'URL:', element.url);
       
-      // Создаём компонент с iframe плеером
-      this.createIframePlayer(element.url, element.title);
+      Lampa.Loading.start(function() {
+        Lampa.Loading.stop();
+        Lampa.Controller.toggle('content');
+        network.clear();
+      });
+      
+      // Загружаем страницу фильма чтобы найти iframe плеера
+      this.fetchWithProxy(element.url, function(html_text) {
+        Lampa.Loading.stop();
+        console.log('SinemaIzle: Movie page loaded');
+        
+        try {
+          var parser = new DOMParser();
+          var doc = parser.parseFromString(html_text, 'text/html');
+          
+          // Ищем iframe плеера
+          var iframes = doc.querySelectorAll('iframe');
+          var player_url = null;
+          
+          for (var i = 0; i < iframes.length; i++) {
+            var src = iframes[i].src || iframes[i].getAttribute('data-src');
+            if (src && src.indexOf('doubleclick') === -1 && src.indexOf('google') === -1) {
+              if (!src.startsWith('http')) {
+                if (src.startsWith('//')) src = 'https:' + src;
+                else if (src.startsWith('/')) src = BASE_URL + src;
+              }
+              player_url = src;
+              console.log('SinemaIzle: Found player iframe:', player_url);
+              break;
+            }
+          }
+          
+          if (player_url) {
+            // Создаём плеер с iframe плеера (а не полной страницы)
+            _this.createIframePlayer(player_url, element.title);
+          } else {
+            console.log('SinemaIzle: No iframe found, opening full page');
+            // Если iframe не найден, открываем полную страницу
+            _this.createIframePlayer(element.url, element.title);
+          }
+        } catch(e) {
+          console.log('SinemaIzle: Parse error:', e);
+          // В случае ошибки открываем полную страницу
+          _this.createIframePlayer(element.url, element.title);
+        }
+      }, function() {
+        Lampa.Loading.stop();
+        console.log('SinemaIzle: Failed to load, opening direct URL');
+        // Если не удалось загрузить, открываем напрямую
+        _this.createIframePlayer(element.url, element.title);
+      });
     };
 
     this.createIframePlayer = function(url, title) {
       var _this = this;
+      
+      console.log('SinemaIzle: Creating iframe player for:', url);
       
       // Создаём HTML для iframe
       var iframe_html = $('<div class="sinemaizle-iframe-container"></div>');
@@ -275,9 +326,16 @@
         <div class="sinemaizle-player">
           <div class="sinemaizle-header">
             <div class="sinemaizle-title">${title}</div>
-            <div class="sinemaizle-close">✕ Закрыть (Назад)</div>
+            <div class="sinemaizle-info">Для выхода нажмите Назад</div>
           </div>
-          <iframe src="${url}" allowfullscreen allow="autoplay; fullscreen; picture-in-picture"></iframe>
+          <div class="sinemaizle-iframe-wrapper">
+            <iframe src="${url}" 
+                    allowfullscreen 
+                    allow="autoplay; fullscreen; picture-in-picture; accelerometer; gyroscope" 
+                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+                    frameborder="0"
+                    scrolling="no"></iframe>
+          </div>
         </div>
       `);
       
@@ -286,13 +344,14 @@
       // Добавляем на страницу
       $('body').append(iframe_html);
       
-      // Показываем
+      // Показываем с анимацией
       setTimeout(function() {
         iframe_html.addClass('active');
       }, 100);
       
       // Обработка закрытия
       var closePlayer = function() {
+        console.log('SinemaIzle: Closing player');
         iframe_html.removeClass('active');
         setTimeout(function() {
           iframe_html.remove();
@@ -300,19 +359,29 @@
         }, 300);
       };
       
-      player_wrapper.find('.sinemaizle-close').on('click', closePlayer);
-      
       // Закрытие по кнопке Назад на пульте
       Lampa.Controller.add('sinemaizle_player', {
-        toggle: function() {},
+        toggle: function() {
+          // Фокус на iframe
+        },
         back: function() {
           closePlayer();
+        },
+        left: function() {
+          // Позволяем навигацию внутри iframe
+        },
+        right: function() {
+          // Позволяем навигацию внутри iframe
+        },
+        up: function() {
+          // Позволяем навигацию внутри iframe
+        },
+        down: function() {
+          // Позволяем навигацию внутри iframe
         }
       });
       
       Lampa.Controller.toggle('sinemaizle_player');
-      
-      Lampa.Noty.show('Для выхода нажмите кнопку Назад на пульте');
     };
 
     this.parsePlayer = function(html_text, element) {
@@ -602,7 +671,7 @@
     
     var manifest = {
       type: 'video',
-      version: '1.2.0',
+      version: '1.2.1',
       name: 'SinemaIzle',
       description: 'Онлайн просмотр с sinemaizle.org (Smart TV compatible)',
       component: 'sinemaizle'
@@ -627,11 +696,11 @@
         .sinemaizle-iframe-container{position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.95);opacity:0;transition:opacity 0.3s;pointer-events:none}
         .sinemaizle-iframe-container.active{opacity:1;pointer-events:all}
         .sinemaizle-player{width:100%;height:100%;display:flex;flex-direction:column}
-        .sinemaizle-header{background:rgba(0,0,0,0.9);padding:1.5em 2em;display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1.4em}
-        .sinemaizle-title{font-weight:600;flex:1}
-        .sinemaizle-close{cursor:pointer;padding:0.5em 1em;background:rgba(255,255,255,0.1);border-radius:0.3em;font-size:0.9em}
-        .sinemaizle-close:hover{background:rgba(255,255,255,0.2)}
-        .sinemaizle-player iframe{flex:1;width:100%;height:100%;border:none}
+        .sinemaizle-header{background:rgba(0,0,0,0.9);padding:1em 2em;display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1.2em}
+        .sinemaizle-title{font-weight:600;flex:1;font-size:1.3em}
+        .sinemaizle-info{opacity:0.7;font-size:0.9em}
+        .sinemaizle-iframe-wrapper{flex:1;width:100%;height:100%;position:relative;overflow:hidden}
+        .sinemaizle-player iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
       </style>
     `);
     $('body').append(Lampa.Template.get('sinemaizle_css', {}, true));
