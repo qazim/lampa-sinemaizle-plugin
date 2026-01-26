@@ -1,8 +1,8 @@
 (function() {
   'use strict';
 
-  var BASE_URL = 'https://sinemaizle.org';
-  
+  //var BASE_URL = 'https://sinemaizle.org';
+  var BASE_URL = 'https://realfilmizle.com';
   // Список прокси серверов (пробуем по очереди)
   var PROXIES = [
     'https://corsproxy.io/?',
@@ -58,7 +58,7 @@
       this.activity.loader(true);
       
       var search_query = encodeURIComponent(object.search || object.movie.title);
-      var search_url = BASE_URL + '/arama?s=' + search_query;
+      var search_url = BASE_URL + '/?s=' + search_query;
       
       console.log('SinemaIzle: Searching for:', object.search || object.movie.title);
       console.log('SinemaIzle: Search URL:', search_url);
