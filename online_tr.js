@@ -1,8 +1,8 @@
 (function() {
   'use strict';
 
-  //var BASE_URL = 'https://sinemaizle.org';
   var BASE_URL = 'https://realfilmizle.com';
+  
   // Список прокси серверов (пробуем по очереди)
   var PROXIES = [
     'https://corsproxy.io/?',
@@ -267,121 +267,14 @@
         network.clear();
       });
       
-      // Загружаем страницу фильма чтобы найти iframe плеера
       this.fetchWithProxy(element.url, function(html_text) {
         Lampa.Loading.stop();
-        console.log('SinemaIzle: Movie page loaded');
-        
-        try {
-          var parser = new DOMParser();
-          var doc = parser.parseFromString(html_text, 'text/html');
-          
-          // Ищем iframe плеера
-          var iframes = doc.querySelectorAll('iframe');
-          var player_url = null;
-          
-          for (var i = 0; i < iframes.length; i++) {
-            var src = iframes[i].src || iframes[i].getAttribute('data-src');
-            if (src && src.indexOf('doubleclick') === -1 && src.indexOf('google') === -1) {
-              if (!src.startsWith('http')) {
-                if (src.startsWith('//')) src = 'https:' + src;
-                else if (src.startsWith('/')) src = BASE_URL + src;
-              }
-              player_url = src;
-              console.log('SinemaIzle: Found player iframe:', player_url);
-              break;
-            }
-          }
-          
-          if (player_url) {
-            // Создаём плеер с iframe плеера (а не полной страницы)
-            _this.createIframePlayer(player_url, element.title);
-          } else {
-            console.log('SinemaIzle: No iframe found, opening full page');
-            // Если iframe не найден, открываем полную страницу
-            _this.createIframePlayer(element.url, element.title);
-          }
-        } catch(e) {
-          console.log('SinemaIzle: Parse error:', e);
-          // В случае ошибки открываем полную страницу
-          _this.createIframePlayer(element.url, element.title);
-        }
+        console.log('SinemaIzle: Movie page loaded, size:', html_text.length);
+        _this.parsePlayer(html_text, element);
       }, function() {
         Lampa.Loading.stop();
-        console.log('SinemaIzle: Failed to load, opening direct URL');
-        // Если не удалось загрузить, открываем напрямую
-        _this.createIframePlayer(element.url, element.title);
+        Lampa.Noty.show('Не удалось загрузить страницу фильма');
       });
-    };
-
-    this.createIframePlayer = function(url, title) {
-      var _this = this;
-      
-      console.log('SinemaIzle: Creating iframe player for:', url);
-      
-      // Создаём HTML для iframe
-      var iframe_html = $('<div class="sinemaizle-iframe-container"></div>');
-      
-      var player_wrapper = $(`
-        <div class="sinemaizle-player">
-          <div class="sinemaizle-header">
-            <div class="sinemaizle-title">${title}</div>
-            <div class="sinemaizle-info">Для выхода нажмите Назад</div>
-          </div>
-          <div class="sinemaizle-iframe-wrapper">
-            <iframe src="${url}" 
-                    allowfullscreen 
-                    allow="autoplay; fullscreen; picture-in-picture; accelerometer; gyroscope" 
-                    sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
-                    frameborder="0"
-                    scrolling="no"></iframe>
-          </div>
-        </div>
-      `);
-      
-      iframe_html.append(player_wrapper);
-      
-      // Добавляем на страницу
-      $('body').append(iframe_html);
-      
-      // Показываем с анимацией
-      setTimeout(function() {
-        iframe_html.addClass('active');
-      }, 100);
-      
-      // Обработка закрытия
-      var closePlayer = function() {
-        console.log('SinemaIzle: Closing player');
-        iframe_html.removeClass('active');
-        setTimeout(function() {
-          iframe_html.remove();
-          Lampa.Controller.toggle('content');
-        }, 300);
-      };
-      
-      // Закрытие по кнопке Назад на пульте
-      Lampa.Controller.add('sinemaizle_player', {
-        toggle: function() {
-          // Фокус на iframe
-        },
-        back: function() {
-          closePlayer();
-        },
-        left: function() {
-          // Позволяем навигацию внутри iframe
-        },
-        right: function() {
-          // Позволяем навигацию внутри iframe
-        },
-        up: function() {
-          // Позволяем навигацию внутри iframe
-        },
-        down: function() {
-          // Позволяем навигацию внутри iframe
-        }
-      });
-      
-      Lampa.Controller.toggle('sinemaizle_player');
     };
 
     this.parsePlayer = function(html_text, element) {
@@ -671,9 +564,9 @@
     
     var manifest = {
       type: 'video',
-      version: '1.2.1',
+      version: '1.0.9',
       name: 'SinemaIzle',
-      description: 'Онлайн просмотр с sinemaizle.org (Smart TV compatible)',
+      description: 'Онлайн просмотр с sinemaizle.org',
       component: 'sinemaizle'
     };
 
@@ -692,15 +585,6 @@
         .online-prestige__info{display:flex;align-items:center;margin-top:0.5em;opacity:0.7}
         .online-prestige.focus::after{content:'';position:absolute;top:-0.6em;left:-0.6em;right:-0.6em;bottom:-0.6em;border-radius:.7em;border:solid .3em #fff;z-index:-1}
         .online-prestige+.online-prestige{margin-top:1.5em}
-        
-        .sinemaizle-iframe-container{position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:rgba(0,0,0,0.95);opacity:0;transition:opacity 0.3s;pointer-events:none}
-        .sinemaizle-iframe-container.active{opacity:1;pointer-events:all}
-        .sinemaizle-player{width:100%;height:100%;display:flex;flex-direction:column}
-        .sinemaizle-header{background:rgba(0,0,0,0.9);padding:1em 2em;display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1.2em}
-        .sinemaizle-title{font-weight:600;flex:1;font-size:1.3em}
-        .sinemaizle-info{opacity:0.7;font-size:0.9em}
-        .sinemaizle-iframe-wrapper{flex:1;width:100%;height:100%;position:relative;overflow:hidden}
-        .sinemaizle-player iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}
       </style>
     `);
     $('body').append(Lampa.Template.get('sinemaizle_css', {}, true));
