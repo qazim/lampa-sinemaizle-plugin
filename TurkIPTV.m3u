@@ -173,3 +173,5 @@ http://canbroadcast.com:7000/canlican/tv.m3u8
 https://live.artidijitalmedya.com/artidijital_sat7turk/sat7turk/playlist.m3u8
 #EXTINF:-1 group-title="Eglence", PLAY TV
 https://ip100.radyotelekomtv.com:3784/stream/play.m3u8
+#EXTINF:-1 group-title="Eglence", SDM TV
+https://host.onlineradyotv.net:8081/sdmtv/tracks-v1a1/mono.m3u8
